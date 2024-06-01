@@ -20,6 +20,20 @@ from models import Użytkownik, Książka, Wypożyczenie
 def home():
     return "Welcome to the Library API!"
 
+@app.route("/login", methods=["POST"])
+def login_user():
+    data = request.json
+    email = data.get("email")
+    haslo = data.get("haslo")
+    user = Użytkownik.query.filter_by(email=email).first()
+    if user and user.haslo == haslo:
+        print("zalogowano")
+        print(user.imie)
+        return jsonify({"message": "Login successful!"}), 200
+    else:
+        print("zle haslo/email:")
+        print(haslo)
+        return jsonify({"message": "Invalid email or password!"}), 200
 
 # Użytkownicy endpoints
 @app.route("/users", methods=["POST"])
@@ -51,14 +65,8 @@ def get_user(email):
         }
     )
 
-@app.route("/password/<string:email>", methods=["GET"])
-def get_password(email):
-    user = Użytkownik.query.filter_by(email=email).first_or_404()
-    return jsonify(
-        {
-            "haslo": user.haslo
-        }
-    )
+
+
 
 
 # Książki endpoints
