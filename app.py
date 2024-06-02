@@ -34,6 +34,29 @@ def login_user():
         print("zle haslo/email:")
         print(haslo)
         return jsonify({"message": "Invalid email or password!"}), 200
+    
+@app.route("/register", methods=["POST"])
+def register_user():
+    data = request.json
+    email = data.get("email")
+    existing_user = Użytkownik.query.filter_by(email=email).first()
+    
+    if existing_user:
+        return jsonify({"message": "User already exists!"}), 200
+
+    new_user = Użytkownik(
+        imie=data.get("imie"),
+        nazwisko=data.get("nazwisko"),
+        email=email,
+        haslo=data.get("haslo"),
+        stan_konta=0
+        
+    )
+    db.session.add(new_user)
+    db.session.commit()
+    return jsonify({"message": "User created!"}), 201
+
+
 
 # Użytkownicy endpoints
 @app.route("/users", methods=["POST"])
@@ -48,6 +71,11 @@ def create_user():
     db.session.add(new_user)
     db.session.commit()
     return jsonify({"message": "User created!"}), 201
+
+
+
+
+
 
 
 @app.route("/users/<string:email>", methods=["GET"])

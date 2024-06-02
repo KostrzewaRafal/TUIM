@@ -15,14 +15,14 @@ class Książka(db.Model):
 
 
 class Użytkownik(db.Model):
-    __tablename__ = "uzytkownicy"
-    __table_args__ = {"schema": "biblioteka"}
-    id_uzytkownika = db.Column(db.Integer, primary_key=True)
-    imie = db.Column(db.String(15))
-    nazwisko = db.Column(db.String(20))
-    email = db.Column(db.String(30), unique=True)
-    haslo = db.Column(db.String(100))
-    stan_konta = db.Column(db.Integer)
+    __tablename__ = 'uzytkownicy'
+    __table_args__ = {'schema': 'biblioteka'}
+    id_uzytkownika = db.Column(db.Integer,primary_key=True)
+    imie = db.Column(db.String(50))
+    nazwisko = db.Column(db.String(50))
+    email = db.Column(db.String(120), unique=True)
+    haslo = db.Column(db.String(120))
+    stan_konta = db.Column(db.Integer, default=0)
 
 
 class Wypożyczenie(db.Model):
