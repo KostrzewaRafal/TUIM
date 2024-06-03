@@ -2,14 +2,23 @@ from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from datetime import datetime
+from sqlalchemy import create_engine
+
+
+
 
 app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = (
     "postgresql://postgres:admin@localhost:5432/postgres"
 )
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+app.config['SQLALCHEMY_POOL_SIZE'] = 50
+app.config['SQLALCHEMY_MAX_OVERFLOW'] = 50
+app.config['SQLALCHEMY_POOL_TIMEOUT'] = 1
+app.config['SQLALCHEMY_POOL_RECYCLE'] = 10
 
-db = SQLAlchemy(app)
+db = SQLAlchemy(app, session_options={'autocommit': True})
+
 migrate = Migrate(app, db)
 
 # Importowanie modeli
@@ -72,7 +81,21 @@ def create_user():
     db.session.commit()
     return jsonify({"message": "User created!"}), 201
 
-
+@app.route("/rentals", methods=["GET"])
+def get_rentals():
+    user_id = request.args.get("userId")
+    rentals = Wypożyczenie.query.filter_by(id_uzytkownika=user_id).all()
+    rental_list = []
+    for rental in rentals:
+        book = Książka.query.get(rental.id_ksiazki)
+        rental_data = {
+            "id": rental.id_wypozyczenia,
+            "tytul": book.tytul,
+            "data_wypozyczenia": rental.data_wypozyczenia.strftime("%Y-%m-%d"),
+            "data_zwrotu": rental.data_zwrotu.strftime("%Y-%m-%d"),
+        }
+        rental_list.append(rental_data)
+    return jsonify(rental_list), 200
 
 
 
