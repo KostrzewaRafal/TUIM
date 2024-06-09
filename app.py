@@ -3,6 +3,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from datetime import datetime
 from sqlalchemy import create_engine
+from datetime import datetime, timedelta
 
 
 
@@ -17,7 +18,7 @@ app.config['SQLALCHEMY_MAX_OVERFLOW'] = 50
 app.config['SQLALCHEMY_POOL_TIMEOUT'] = 1
 app.config['SQLALCHEMY_POOL_RECYCLE'] = 10
 
-db = SQLAlchemy(app, session_options={'autocommit': True})
+db = SQLAlchemy(app)
 
 migrate = Migrate(app, db)
 
@@ -97,7 +98,47 @@ def get_rentals():
         rental_list.append(rental_data)
     return jsonify(rental_list), 200
 
+@app.route("/rentals", methods=["POST"])
+def create_rental():
+    data = request.json
+    rental_date = datetime.strptime(data.get("data_wypozyczenia"), "%Y-%m-%d")
+    datazwrotu = rental_date + timedelta(weeks=1)
+    # Sprawdzamy, czy użytkownik próbuje wypożyczyć więcej książek niż jest dostępnych kopii
+    book = Książka.query.get(data.get("id_ksiazki"))
+    if book.liczba_dostepnych_kopii <= 0:
+        return jsonify({"message": "Book is not available for rental!"}), 400
+    
+    # Tworzymy nowe wypożyczenie
+    new_rental = Wypożyczenie(
+        id_ksiazki=data.get("id_ksiazki"),
+        id_uzytkownika=data.get("id_uzytkownika"),
+        data_wypozyczenia=rental_date,
+        data_zwrotu=datazwrotu
+    )
+    
+    # Zmniejszamy liczbę dostępnych kopii książki
+    book.liczba_dostepnych_kopii -= 1
+    print("Liczba dostępnych kopii po zmianie:", book.liczba_dostepnych_kopii)
+    db.session.add(new_rental)
+    db.session.commit()
+    print("Liczba dostępnych kopii po zmianie2:", book.liczba_dostepnych_kopii)
+    return jsonify({"message": "Rental created!"}), 201
 
+@app.route("/books", methods=["GET"])
+def get_books():
+    books = Książka.query.all()
+    books_list = []
+    for book in books:
+        book_data = {
+            "id": book.id_ksiazki,
+            "tytul": book.tytul,
+            "autor": book.autor,
+            "kategoria": book.kategoria,
+            "liczba_dostepnych_kopii": book.liczba_dostepnych_kopii,
+            "rok_wydania": book.rok_wydania,
+        }
+        books_list.append(book_data)
+    return jsonify(books_list), 200
 
 
 
@@ -120,23 +161,11 @@ def get_user(email):
 
 
 
-# Książki endpoints
-@app.route("/books", methods=["POST"])
-def create_book():
-    data = request.json
-    new_book = Książka(
-        tytul=data.get("tytul"),
-        autor=data.get("autor"),
-        kategoria=data.get("kategoria"),
-        liczba_dostepnych_kopii=data.get("liczba_dostepnych_kopii"),
-        rok_wydania=data.get("rok_wydania"),
-    )
-    db.session.add(new_book)
-    db.session.commit()
-    return jsonify({"message": "Book created!"}), 201
 
 
-@app.route("/books/<int:id>", methods=["GET"])
+
+
+@app.route("/book/<int:id>", methods=["GET"])
 def get_book(id):
     book = Książka.query.get_or_404(id)
     return jsonify(
@@ -149,20 +178,6 @@ def get_book(id):
             "rok_wydania": book.rok_wydania,
         }
     )
-
-
-# Wypożyczenia endpoints
-@app.route("/rentals", methods=["POST"])
-def create_rental():
-    data = request.json
-    new_rental = Wypożyczenie(
-        id_ksiazki=data.get("id_ksiazki"),
-        id_uzytkownika=data.get("id_uzytkownika"),
-        data_wypozyczenia=datetime.strptime(data.get("data_wypozyczenia"), "%Y-%m-%d"),
-    )
-    db.session.add(new_rental)
-    db.session.commit()
-    return jsonify({"message": "Rental created!"}), 201
 
 
 @app.route("/rentals/<int:id>", methods=["GET"])
