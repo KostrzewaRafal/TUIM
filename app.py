@@ -4,6 +4,8 @@ from flask_migrate import Migrate
 from datetime import datetime
 from sqlalchemy import create_engine
 from datetime import datetime, timedelta
+import paypalrestsdk
+from paypalrestsdk import Payment
 
 
 
@@ -26,6 +28,65 @@ migrate = Migrate(app, db)
 from models import Użytkownik, Książka, Wypożyczenie
 
 
+#----------------------------------------------------------------------------------------------------------------------
+
+
+# Konfiguracja PayPal SDK
+paypalrestsdk.configure({
+    "mode": "sandbox",  # Użyj "live" w produkcji
+    "client_id": "ARoHlvsSBoH90U07deqAU_WHK_UvPU3L04tzftdhdZjPeXx4007Ciwqo0fX0E58QMcbEc8MzH9pK6d-b",
+    "client_secret": "ENPto8cR60V2Ou0eZSYsWyhTtBOn0tfvRThkJr_bF6LTnBgvcXeJCmZ2juM-XFlEXoqJ9LyCCTkGY2iV"
+})
+
+@app.route("/paypal/topup", methods=["POST"])
+def paypal_topup():
+    data = request.json
+    amount = data.get("amount")
+    user_id = data.get("user_id")
+
+    payment = Payment({
+        "intent": "sale",
+        "payer": {
+            "payment_method": "paypal"
+        },
+        "transactions": [{
+            "amount": {
+                "total": str(amount),
+                "currency": "USD"
+            },
+            "description": f"Doładowanie konta dla użytkownika {user_id}"
+        }],
+        "redirect_urls": {
+            "return_url": "http://localhost:5000/payment/execute",
+            "cancel_url": "http://localhost:5000/payment/cancel"
+        }
+    })
+
+    if payment.create():
+        return jsonify({"paymentID": payment.id})
+    else:
+        return jsonify({"error": payment.error}), 400
+
+@app.route("/payment/execute", methods=["POST"])
+def execute_payment():
+    payment_id = request.json.get("paymentID")
+    payer_id = request.json.get("payerID")
+
+    payment = Payment.find(payment_id)
+
+    if payment.execute({"payer_id": payer_id}):
+        # Zaktualizuj stan konta użytkownika w bazie danych
+        user_id = request.json.get("user_id")
+        amount = float(payment.transactions[0].amount.total)
+        user = Użytkownik.query.get(user_id)
+        user.stan_konta += amount
+        db.session.commit()
+        return jsonify({"message": "Payment executed successfully"}), 200
+    else:
+        return jsonify({"error": payment.error}), 400
+
+
+#---------------------------------------------------------------------------------------------------------------------------
 @app.route("/")
 def home():
     return "Welcome to the Library API!"
@@ -67,6 +128,15 @@ def register_user():
     return jsonify({"message": "User created!"}), 201
 
 
+# Użytkownicy endpoints
+@app.route("/test", methods=["GET"])
+def test():
+    book = db.session.query(Książka).get(11)
+    print(book.liczba_dostepnych_kopii)
+    setattr(book, 'liczba_dostepnych_kopii', book.liczba_dostepnych_kopii + 1)
+    db.session.commit()
+    print(book.liczba_dostepnych_kopii)
+    return jsonify({"message": "dodano ksiązke test+1"}), 200
 
 # Użytkownicy endpoints
 @app.route("/users", methods=["POST"])
@@ -104,10 +174,14 @@ def create_rental():
     rental_date = datetime.strptime(data.get("data_wypozyczenia"), "%Y-%m-%d")
     datazwrotu = rental_date + timedelta(weeks=1)
     # Sprawdzamy, czy użytkownik próbuje wypożyczyć więcej książek niż jest dostępnych kopii
-    book = Książka.query.get(data.get("id_ksiazki"))
+    usr = db.session.query(Użytkownik).get(data.get("id_uzytkownika"))
+    book = db.session.query(Książka).get(data.get("id_ksiazki"))
     if book.liczba_dostepnych_kopii <= 0:
         return jsonify({"message": "Book is not available for rental!"}), 400
     
+    if usr.stan_konta <= 0:
+        return jsonify({"message": "Brak srodkow!"}), 200
+
     # Tworzymy nowe wypożyczenie
     new_rental = Wypożyczenie(
         id_ksiazki=data.get("id_ksiazki"),
@@ -117,8 +191,8 @@ def create_rental():
     )
     
     # Zmniejszamy liczbę dostępnych kopii książki
+    usr.stan_konta -= 1
     book.liczba_dostepnych_kopii -= 1
-    print("Liczba dostępnych kopii po zmianie:", book.liczba_dostepnych_kopii)
     db.session.add(new_rental)
     db.session.commit()
     print("Liczba dostępnych kopii po zmianie2:", book.liczba_dostepnych_kopii)
@@ -154,6 +228,7 @@ def get_user(email):
             "imie": user.imie,
             "nazwisko": user.nazwisko,
             "email": user.email,
+            "stan_konta": user.stan_konta
         }
     )
 
