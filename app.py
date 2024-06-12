@@ -175,6 +175,7 @@ def create_rental():
     datazwrotu = rental_date + timedelta(weeks=1)
     # Sprawdzamy, czy użytkownik próbuje wypożyczyć więcej książek niż jest dostępnych kopii
     usr = db.session.query(Użytkownik).get(data.get("id_uzytkownika"))
+    print(usr.id_uzytkownika)
     book = db.session.query(Książka).get(data.get("id_ksiazki"))
     if book.liczba_dostepnych_kopii <= 0:
         return jsonify({"message": "Book is not available for rental!"}), 400
